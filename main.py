@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    scheduler = BlockingScheduler(timezone="UTC")
+    scheduler = BlockingScheduler(timezone="Asia/Kolkata")
 
     # Schedule Module 1 — Daily Commit Checker
     scheduler.add_job(

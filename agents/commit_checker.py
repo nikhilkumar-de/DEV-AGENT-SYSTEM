@@ -8,9 +8,12 @@
 #   4. Appends the daily result to logs/commit_log.json
 # =============================================================================
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import json
 import logging
-import os
 from datetime import datetime, timezone
 
 import config
