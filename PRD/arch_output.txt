@@ -1,0 +1,618 @@
+
+ENGINEERING ARCHITECTURE DOCUMENT
+
+Development Agent System
+Commit Checker  |  PR Reviewer  |  SAST Scanner
+
+
+1. Introduction
+This Engineering Architecture Document (EAD) describes the complete technical design of the Development Agent System. It covers system components, data flow, module design, technology choices, deployment strategy, and integration patterns.
+This document is intended for developers, tech leads, and reviewers who will build, review, or maintain this system.
+
+
+2. System Overview
+The system is a Python application that connects to GitHub and responds to two types of triggers: a scheduled cron job (for daily commit checks) and GitHub Webhook events (for PR and push events). Based on the trigger, one or more of the three modules activates and performs its function.
+
+
+
+3. High-Level Architecture
+The diagram below shows how all parts of the system connect. The GitHub Repository is the central source of truth. Events from it drive all three modules through either a scheduler or a webhook server.
+
+
+
+4. Project Folder Structure
+All code lives in one Python project. Below is the recommended folder layout with each file's purpose explained.
+
+
+
+5. Module-by-Module Design
+5.1  Module 1 — Daily Commit Checker
+
+
+How It Works — Step by Step
+Scheduler triggers commit_checker.py at 9 PM daily.
+It calls the GitHub API to get all commits from today.
+It extracts the GitHub usernames of everyone who committed.
+It compares that list against the configured TEAM_MEMBERS list.
+Anyone not in the committed list is flagged as 'missing'.
+A Slack message is sent for each missing person.
+Result is appended to logs/commit_log.json.
+
+Data Flow Diagram
+
+Key Files
+
+5.2  Module 2 — PR Review Agent
+
+
+How It Works — Step by Step
+Developer opens a PR on GitHub.
+GitHub sends a webhook POST request to our Flask server at /webhook.
+webhook_server.py receives it and calls pr_reviewer.py.
+The agent fetches all changed files from the PR.
+For each Python file, it sends the code diff to the AI (GPT-4 / Claude).
+The AI returns a structured review listing all issues found.
+The agent posts the review as a comment on the PR via GitHub API.
+
+Data Flow Diagram
+
+What the AI Reviews
+
+Key Files
+
+
+5.3  Module 3 — SAST Scanner & Test Generator
+
+
+What is SAST?
+SAST stands for Static Application Security Testing. It means scanning source code WITHOUT running it to find security vulnerabilities. Think of it like an X-ray machine for code — it can see dangerous patterns that a normal human reviewer might miss.
+
+
+How It Works — Step by Step
+Developer pushes code or opens a PR.
+GitHub webhook fires to webhook_server.py.
+sast_scanner.py is called with the PR number.
+Changed files are downloaded temporarily to /tmp/.
+Semgrep is executed on each file using subprocess.
+Semgrep returns JSON output with all findings.
+The scanner parses the findings — line number, severity, description.
+test_generator.py creates a Python test file for each finding.
+A formatted report + test cases are posted as a PR comment.
+
+Data Flow Diagram
+
+Key Files
+
+
+6. Technology Stack
+
+7. End-to-End Data Flow Scenarios
+Scenario A — No Commit Alert
+
+Scenario B — PR Opened
+
+
+8. External API Integrations
+
+8.1  GitHub API
+
+8.2  OpenAI API (Module 2)
+The PR reviewer sends the following system and user prompt to GPT-4:
+
+System: You are a senior Python code reviewer.
+        Review this code diff and list all issues:
+        logic errors, missing edge cases, bad practices,
+        missing docstrings, and security concerns.
+
+User:   File: agents/commit_checker.py
+        Code diff: <actual diff content here>
+
+8.3  Semgrep (Module 3)
+Semgrep is executed as a subprocess command and returns JSON:
+
+$ semgrep --config auto --json /tmp/scan_target.py
+
+Returns JSON like:
+{
+  'results': [
+    {
+      'check_id': 'python.lang.security.sql-injection',
+      'path': '/tmp/scan_target.py',
+      'start': { 'line': 3 },
+      'extra': {
+        'message': 'Detected SQL injection via string concatenation',
+        'severity': 'ERROR'
+      }
+    }
+  ]
+}
+
+8.4  Slack API (Notifications)
+client = WebClient(token=SLACK_TOKEN)
+client.chat_postMessage(
+    channel='#dev-alerts',
+    text='Warning: Rahul has not committed today (Feb 25, 2026)'
+)
+
+
+9. Deployment Architecture
+The system runs as a single always-on Python process on a server. It simultaneously runs a Flask webhook server and a background scheduler.
+
+9.1  Local Development Setup
+
+9.2  Production Deployment
+
+9.3  Deployment Architecture Diagram
+
+
+10. Security Considerations
+
+11. Development Timeline
+
+12. Open Questions for Team
+
+13. Glossary
+
+14. Document Approval
+
+Project
+Development Agent System
+Author
+Nikhil Kumar
+Reviewer
+Shubham Karmakar
+Version
+1.0
+Date
+February 25, 2026
+Status
+Draft — Internal Review
+
+Goal in one line:
+Build a single Python-based intelligent agent with three modules that automatically monitors commits, reviews Pull Requests, and detects security vulnerabilities in code — without any manual intervention.
+
+Module
+Trigger
+Core Function
+Output
+Module 1 — Commit Checker
+Cron Job (Daily 9 PM)
+Checks who has/has not committed today
+Slack/Email Alert + Log File
+Module 2 — PR Reviewer
+GitHub Webhook (PR opened)
+AI reads code diff and reviews it
+Review comment posted on PR
+Module 3 — SAST Scanner
+GitHub Webhook (PR/Push)
+Scans code for bugs & vulnerabilities
+Security report + Test cases on PR
+
+ARCHITECTURE OVERVIEW
+ 
+  +----------------------------------------------+
+  |           GITHUB REPOSITORY                |
+  +----------------+-------------+------------+
+                  |             |
+            Cron (Daily)    Webhook (PR/Push)
+                  |             |
+                  v             v
+  +---------------+   +--------------------+
+  |   MODULE 1    |   |  AGENT CONTROLLER  |
+  | Commit Checker|   | (webhook_server.py)|
+  +-------+-------+   +----+----------+----+
+          |                 |          |
+          v                 v          v
+  +-------+------+  +--------+--+  +--+--------+
+  | Slack / Email |  | MODULE 2  |  | MODULE 3  |
+  | Notifier      |  | PR Review |  | SAST Scan |
+  | + Log File     |  | (AI/LLM)  |  | (Semgrep) |
+  +---------------+  +-----+-----+  +-----+-----+
+                           |                |
+                           v                v
+                    PR Comment on     Error Report +
+                    GitHub            Test Cases
+
+dev-agent-system/
+  |
+  +-- main.py                   <- Entry point. Starts scheduler + webhook server
+  +-- config.py                 <- API tokens, team list, settings
+  +-- requirements.txt          <- All Python dependencies
+  +-- webhook_server.py         <- Flask server that listens to GitHub events
+  |
+  +-- agents/
+  |     +-- commit_checker.py   <- MODULE 1: Daily commit monitoring
+  |     +-- pr_reviewer.py      <- MODULE 2: AI-based PR review
+  |     +-- sast_scanner.py     <- MODULE 3: Semgrep security scan
+  |
+  +-- utils/
+  |     +-- github_client.py    <- GitHub API connection wrapper
+  |     +-- notifier.py         <- Slack and Email sender
+  |     +-- test_generator.py   <- Generates test cases from SAST errors
+  |
+  +-- logs/
+        +-- commit_log.json     <- Stores daily commit check results
+
+Purpose:
+Every day at 9 PM, this module fetches all commits made to the repository and checks which team members have NOT committed. It logs results and sends a Slack/Email alert for missing members.
+
+Cron 9PM  -->  commit_checker.py
+               |
+               +--> GitHub API: get commits since today 00:00
+               |         |
+               |         v
+               |    [List of committers today]
+               |
+               +--> Compare vs TEAM_MEMBERS config
+               |         |
+               |         v
+               |    [Missing members list]
+               |
+               +--> notifier.py  -->  Slack Message
+               |
+               +--> logs/commit_log.json  (append result)
+
+File
+Responsibility
+agents/commit_checker.py
+Core logic — fetches commits, finds missing members, triggers alerts
+utils/github_client.py
+Connects to GitHub API using PyGitHub library
+utils/notifier.py
+Sends Slack messages or emails
+logs/commit_log.json
+Persistent daily log of results
+
+Purpose:
+When a developer opens or updates a Pull Request on GitHub, this module reads the code changes (diff) and uses an AI/LLM to review them — automatically posting review comments directly on the PR within minutes.
+
+Developer opens PR
+       |
+       +--> GitHub sends Webhook --> webhook_server.py (/webhook endpoint)
+                                          |
+                                          +--> pr_reviewer.py
+                                                     |
+                                          GitHub API: get PR files (diffs)
+                                                     |
+                                          For each .py file:
+                                                     |
+                                          Send diff to OpenAI/Claude API
+                                                     |
+                                          Receive AI review response
+                                                     |
+                                          Post comment on PR (GitHub API)
+
+Category
+Example Issue Detected
+Logic Errors
+Division without checking if denominator is zero
+Missing Edge Cases
+No handling for empty list, null input, or negative numbers
+Code Quality
+Function is too long, variable names are unclear
+Missing Docs
+Function has no docstring or inline comments
+Bad Practices
+Hardcoded values, using print() instead of logging
+
+File
+Responsibility
+webhook_server.py
+Flask HTTP server that receives GitHub webhook events
+agents/pr_reviewer.py
+Fetches PR diff, calls AI API, posts review comment
+utils/github_client.py
+Connects to GitHub API
+
+Purpose:
+This module uses a SAST (Static Application Security Testing) tool called Semgrep to scan code for security vulnerabilities and known bug patterns. It also auto-generates test cases for every issue it finds, and posts a full report on the PR.
+
+SAST Detects
+Example in Code
+SQL Injection
+query = 'SELECT * FROM users WHERE id = ' + user_id
+Hardcoded Passwords
+password = 'admin123'
+Dangerous OS Commands
+os.system('rm -rf /tmp/' + user_input)
+Insecure Random
+random.random() used for security tokens
+Path Traversal
+open('../' + filename) with unvalidated user input
+
+PR Opened / Code Pushed
+       |
+       +--> GitHub Webhook --> webhook_server.py
+                                    |
+                                    +--> sast_scanner.py
+                                               |
+                              Download changed files to /tmp/
+                                               |
+                              Run: semgrep --config auto --json file.py
+                                               |
+                              Parse JSON output --> List of findings
+                                               |
+                              +--> format_error_report(findings)
+                              |
+                              +--> test_generator.py --> test cases
+                              |
+                              Post PR Comment (report + test cases)
+
+File
+Responsibility
+agents/sast_scanner.py
+Downloads files, runs Semgrep, parses results, posts report
+utils/test_generator.py
+Takes Semgrep findings and generates Python test case stubs
+webhook_server.py
+Receives trigger and calls sast_scanner.py
+
+Component
+Technology
+Why We Chose It
+Core Language
+Python 3.10+
+Team's primary language, great library support
+GitHub Integration
+PyGitHub + REST API
+Official Python wrapper for GitHub API
+AI/LLM for PR Review
+OpenAI GPT-4 API
+Best code understanding capability
+SAST Scanner
+Semgrep
+Free, fast, highly configurable security scanner
+Webhook Server
+Flask (Python)
+Lightweight HTTP server, easy to set up
+Task Scheduler
+APScheduler (Python)
+Simple cron-like scheduling inside Python
+Slack Notifications
+slack-sdk (Python)
+Official Slack library for sending messages
+Email Notifications
+smtplib (built-in)
+Built into Python, no extra dependency needed
+Deployment
+AWS EC2 / Railway
+Simple VM or PaaS for running the server
+Webhook Tunneling
+ngrok (local dev)
+Expose localhost to GitHub during development
+
+Step
+Action
+Component
+1
+Cron fires at 9 PM every day
+APScheduler in main.py
+2
+GitHub API called to get today's commits
+github_client.py
+3
+Committed usernames extracted from response
+commit_checker.py
+4
+Compare with TEAM_MEMBERS list in config.py
+commit_checker.py
+5
+Missing members identified
+commit_checker.py
+6
+Slack message sent: 'Rahul has not committed today'
+notifier.py
+7
+Result logged to logs/commit_log.json
+commit_checker.py
+
+Step
+Action
+Component
+1
+Developer opens PR on GitHub
+GitHub
+2
+GitHub sends POST to http://your-server:5000/webhook
+GitHub Webhooks
+3
+Flask server receives request
+webhook_server.py
+4
+Event type identified as 'pull_request' opened
+webhook_server.py
+5
+pr_reviewer.py called with PR number
+webhook_server.py
+6
+Changed files (diffs) fetched from GitHub API
+pr_reviewer.py
+7
+Code diff sent to OpenAI API for review
+pr_reviewer.py
+8
+AI returns list of issues found
+OpenAI API
+9
+Review comment posted on PR
+pr_reviewer.py
+10
+sast_scanner.py called with same PR number
+webhook_server.py
+11
+Files downloaded to /tmp/
+sast_scanner.py
+12
+Semgrep scan executed on each file
+sast_scanner.py
+13
+Findings parsed from JSON output
+sast_scanner.py
+14
+Test cases generated for each finding
+test_generator.py
+15
+Security report + test cases posted as PR comment
+sast_scanner.py
+
+Operation
+API Call
+Used In
+Get today's commits
+repo.get_commits(since=today)
+Module 1
+Get PR details
+repo.get_pull(pr_number)
+Module 2 & 3
+Get changed files in PR
+pr.get_files()
+Module 2 & 3
+Get file content
+repo.get_contents(path, ref=sha)
+Module 3
+Post comment on PR
+pr.create_issue_comment(body)
+Module 2 & 3
+
+Step
+Command / Action
+1. Clone project
+git clone <repo-url> && cd dev-agent-system
+2. Install dependencies
+pip install -r requirements.txt
+3. Add credentials
+Edit config.py with GitHub token, OpenAI key, Slack token
+4. Start the agent
+python main.py
+5. Expose to GitHub
+ngrok http 5000  (copy the HTTPS URL)
+6. Set GitHub webhook
+GitHub Repo > Settings > Webhooks > Add new > paste ngrok URL
+
+Step
+Action
+1. Provision server
+Launch an AWS EC2 t2.micro (free tier) or Railway/Render app
+2. Upload code
+git clone your repo on the server
+3. Install dependencies
+pip install -r requirements.txt
+4. Set environment variables
+Export GITHUB_TOKEN, OPENAI_KEY, SLACK_TOKEN as env vars
+5. Run as background service
+Use: nohup python main.py & or set up systemd service
+6. Update GitHub Webhook
+Set webhook URL to http://your-server-ip:5000/webhook
+
+  DEVELOPER LAPTOP          GITHUB.COM              AWS EC2 SERVER
+  +--------------+          +----------+            +-------------------+
+  |  git push    | -------> | GitHub   | ---------> | main.py running   |
+  |  open PR     |          | Webhooks |            | Flask :5000       |
+  +--------------+          +----+-----+            | APScheduler       |
+                                 |                  +---------+---------+
+                                 |                            |
+                                 +----------- OR             |
+                                                              v
+                                              +----------------------------+
+                                              | Module 1 / 2 / 3 execute  |
+                                              | Results sent to:           |
+                                              |  - GitHub PR Comments      |
+                                              |  - Slack channel           |
+                                              |  - Local log file          |
+                                              +----------------------------+
+
+Risk
+Mitigation
+API keys exposed in code
+Store all keys as environment variables, never in code
+Webhook receives fake requests
+Validate GitHub webhook signature using HMAC-SHA256
+GitHub API rate limiting
+Cache responses, use exponential backoff on 429 errors
+Semgrep false positives
+Add .semgrepignore file and allow inline suppression comments
+OpenAI API cost overrun
+Limit to changed files only, set max_tokens cap per request
+Server exposed to internet
+Use HTTPS with SSL cert (Let's Encrypt), restrict to GitHub IPs
+
+Week
+Tasks
+Deliverable
+Week 1
+Research GitHub API, Semgrep, LangChain. Set up project structure. Read docs shared by Shubham.
+Working GitHub API connection
+Week 2
+Build Module 1 — Commit Checker. Connect Slack notifications. Write tests.
+Commit alerts working on Slack
+Week 3
+Build webhook server. Build Module 2 — PR Reviewer with OpenAI integration.
+Bot commenting on PRs automatically
+Week 4
+Build Module 3 — SAST scanner + test case generator. Run on Shubham's buggy code sample.
+Security report on PRs working
+Week 5
+Integration testing of all 3 modules. Fix bugs. Deploy to EC2. Demo to team.
+Full system live and deployed
+
+#
+Question
+Owner
+1
+Which GitHub repository should the agent monitor?
+Shubham
+2
+What is the full list of team member GitHub usernames?
+Shubham
+3
+Which Slack channel should commit alerts be posted to?
+Shubham
+4
+Is the buggy code sample ready to share for Module 3 testing?
+Shubham
+5
+Should we use OpenAI or Claude API for PR review?
+Nikhil
+6
+What time should the daily commit check run?
+Team
+7
+Is the server hosted on GitHub or GitLab?
+Shubham
+
+Term
+Definition
+PR (Pull Request)
+A request to merge code changes into the main branch on GitHub
+SAST
+Static Application Security Testing — scanning code without running it
+Semgrep
+Open-source SAST tool that finds bugs and vulnerabilities in code
+Webhook
+A URL that GitHub calls automatically when events (like a PR) happen
+Cron Job
+A scheduled task that runs automatically at a defined time
+LLM
+Large Language Model — AI model (like GPT-4 or Claude) that understands code
+Diff
+The set of lines added or removed in a code change
+ngrok
+Tool that creates a public URL tunnel to your local machine for testing
+APScheduler
+Python library for running scheduled background tasks
+Flask
+Lightweight Python web framework used to receive webhook requests
+
+Name
+Role
+Approved?
+Date
+Nikhil Kumar
+Developer / Author
+
+
+Shubham Karmakar
+Engineering Lead / Reviewer
+
+
+

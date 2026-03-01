@@ -1,0 +1,254 @@
+Product Requirements Document
+Development Agent System
+Version 1.0  |  February 2026
+
+1. Project Overview
+This document outlines the requirements for building a Development Agent System — a unified intelligent agent with three modules designed to automate code quality enforcement, pull request reviews, and error detection across the development team's GitHub repository.
+The system was assigned by Engineering Lead Shubham Karmakar and is to be developed by Nikhil Kumar.
+2. Problem Statement
+The development team currently faces the following challenges:
+No visibility into whether team members are making daily code commits, causing missed progress tracking.
+Pull Requests (PRs) are reviewed manually and slowly, causing delays in the development cycle.
+Bugs, security vulnerabilities, and code errors are not caught early, leading to production issues.
+No automated testing pipeline is triggered when code is pushed or PRs are raised.
+
+3. Goals & Objectives
+Automate daily commit monitoring and notify the team when someone has not committed.
+Automate PR reviews using AI to detect issues without waiting for a human reviewer.
+Detect code errors and security vulnerabilities using SAST tools when PRs or code pushes happen.
+Auto-generate test cases for errors found during code analysis.
+Reduce manual engineering overhead in code reviews and QA.
+
+4. Scope
+4.1 In Scope
+One unified agent with three sub-modules built in Python.
+Integration with GitHub API for commit and PR data.
+Integration with Slack or Email for notifications.
+SAST tool integration (e.g., Semgrep or Bandit).
+Automated test case generation for detected errors.
+4.2 Out of Scope
+No UI/dashboard in v1.0.
+No integration with JIRA or project management tools in v1.0.
+No support for non-Python codebases in v1.0.
+
+5. Feature Requirements
+Module 1 — Daily Commit Checker Agent
+Purpose: Monitor whether all team members have made at least one Git commit each day.
+
+
+Example Notification:
+⚠️  Alert: Rahul has not made any commit today (Feb 25, 2026). Please check with the team.
+
+Module 2 — PR Review Agent
+Purpose: Automatically review Pull Requests when they are raised and post review comments directly on the PR.
+
+
+Example PR Comment by Bot:
+🤖 PR Review Bot — Line 12: Potential ZeroDivisionError detected. Add a check for b == 0 before dividing. No docstring found in function divide().
+
+Module 3 — SAST Error Detection & Test Case Generator
+Purpose: Scan code for security vulnerabilities and errors using SAST tools, and auto-generate test cases for the issues found.
+
+
+Example Error Report:
+🚨 SQL Injection Risk — Line 3: User input directly concatenated in SQL query. Severity: HIGH
+🚨 Hardcoded Credential — Line 7: Password stored in plaintext. Severity: HIGH
+⚠️  Dangerous OS Command — Line 5: os.system() with user input. Severity: MEDIUM
+
+6. Proposed Tech Stack
+
+7. High-Level Architecture
+The system consists of a single Python-based agent application with three loosely coupled modules, all triggered either by schedule or by GitHub webhook events.
+
+
+8. Development Timeline
+
+9. Success Metrics
+Daily commit alerts are sent within 1 hour of the scheduled check time.
+PR review comments appear within 5 minutes of PR being raised.
+SAST scan detects at least 90% of known vulnerabilities in the sample buggy code provided by Shubham.
+Auto-generated test cases successfully reproduce the detected errors.
+Zero manual intervention required for routine commit checks and PR scans.
+
+10. Risks & Mitigation
+
+11. Open Questions
+Which Slack workspace/channel should commit alerts be posted to?
+What is the list of team members whose commits need to be tracked?
+Is the repository hosted on GitHub or GitLab?
+Should the buggy code sample from Shubham be used as the official test suite?
+What is the preferred SAST tool — Semgrep or Bandit?
+
+12. Approvals
+
+Field
+Details
+Project Name
+Development Agent System
+Prepared By
+Nikhil Kumar
+Reviewed By
+Shubham Karmakar
+Date
+February 25, 2026
+Version
+1.0
+Status
+Draft
+
+Requirement ID
+Description
+Priority
+M1-01
+Agent runs automatically every day at a scheduled time (e.g., 9 PM)
+High
+M1-02
+Fetch all commits from the repository for the current day using GitHub API
+High
+M1-03
+Compare commits against the predefined team member list
+High
+M1-04
+Log the daily commit status to a file (JSON or CSV)
+Medium
+M1-05
+Send Slack or Email notification for members with no commit
+High
+M1-06
+Notification message should include name, date, and missing commit details
+Medium
+
+Requirement ID
+Description
+Priority
+M2-01
+Trigger automatically when a new PR is opened on GitHub (via webhook)
+High
+M2-02
+Read and parse the code diff from the PR
+High
+M2-03
+Analyze code for logic errors, bad practices, and missing edge cases using AI
+High
+M2-04
+Post review comments directly on the PR via GitHub API
+High
+M2-05
+Flag functions with no docstrings or no unit tests
+Medium
+M2-06
+Support Python codebase in v1.0
+High
+
+Requirement ID
+Description
+Priority
+M3-01
+Trigger on PR raise or code push event
+High
+M3-02
+Run SAST tool (Semgrep / Bandit) against the changed code files
+High
+M3-03
+Parse SAST output and extract all error/vulnerability findings
+High
+M3-04
+Report errors with line number, severity, and description
+High
+M3-05
+Auto-generate Python unit test cases for each detected error
+High
+M3-06
+Post error report as a PR comment or save to a report file
+Medium
+M3-07
+Support detection of: SQL Injection, hardcoded passwords, dangerous OS commands
+High
+
+Component
+Technology
+Programming Language
+Python 3.10+
+GitHub Integration
+GitHub REST API / PyGitHub library
+SAST Tool
+Semgrep or Bandit (Python)
+AI / LLM for PR Review
+OpenAI GPT-4 or Claude API
+Notifications
+Slack API (slack-sdk) or SMTP Email
+Agent Orchestration
+LangChain or Custom Python Agent
+Scheduler
+Cron Job (Linux) or APScheduler (Python)
+Logging
+Python logging module + JSON log file
+
+Trigger
+Module
+Action
+Output
+Cron (Daily)
+Commit Checker
+Fetch commits via GitHub API
+Slack/Email Alert + Log File
+GitHub Webhook (PR Opened)
+PR Reviewer
+Read diff, analyze with AI
+PR Comment on GitHub
+GitHub Webhook (PR / Push)
+SAST Error Detector
+Run Semgrep/Bandit, parse results
+Error Report + Test Cases
+
+Week
+Task
+Owner
+Week 1
+Research GitHub API, SAST tools (Semgrep/Bandit), LangChain basics
+Nikhil
+Week 1
+Review documentation shared by Shubham
+Nikhil
+Week 2
+Build Module 1 — Daily Commit Checker + Slack notification
+Nikhil
+Week 3
+Build Module 2 — PR Review Agent with GitHub webhook
+Nikhil
+Week 4
+Build Module 3 — SAST integration + test case generation
+Nikhil
+Week 5
+Integration testing, bug fixes, demo to team
+Nikhil + Shubham
+
+Risk
+Impact
+Mitigation
+GitHub API rate limits
+Medium
+Implement caching and exponential backoff
+LLM API costs for PR review
+Medium
+Limit to changed files only, use smaller model for v1
+False positives in SAST
+Low
+Allow manual override / suppression comments in code
+No documentation available
+Medium
+Research online, use GPT for guidance as suggested by manager
+
+Name
+Role
+Signature
+Date
+Shubham Karmakar
+Engineering Lead / Reviewer
+
+
+Nikhil Kumar
+Developer / Author
+
+
+
