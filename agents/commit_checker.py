@@ -115,6 +115,38 @@ def log_result(results: list):
     logger.info(f"Log written to {log_file}")
 
 
+def send_daily_summary(results: list):
+    """
+    Send one daily summary email showing the full status of all team members —
+    who committed and who did not.
+    """
+    today_str  = datetime.now().strftime("%b %d, %Y")
+    committed  = [r for r in results if r["committed"]]
+    missing    = [r for r in results if not r["committed"]]
+
+    committed_lines = "\n".join(
+        f"  ✅  {r['username']}  ({r['repo']})" for r in committed
+    ) or "  None"
+
+    missing_lines = "\n".join(
+        f"  ❌  {r['username']}  ({r['repo']})" for r in missing
+    ) or "  None"
+
+    subject = f"Daily Commit Summary — {today_str} ({len(committed)}/{len(results)} committed)"
+    body    = (
+        f"Hello Team,\n\n"
+        f"Here is the daily commit check report for {today_str}.\n\n"
+        f"{'='*50}\n"
+        f"COMMITTED TODAY ({len(committed)}/{len(results)}):\n"
+        f"{committed_lines}\n\n"
+        f"DID NOT COMMIT ({len(missing)}/{len(results)}):\n"
+        f"{missing_lines}\n"
+        f"{'='*50}\n\n"
+        f"-- Development Agent System"
+    )
+    send_email(subject=subject, body=body)
+
+
 def run():
     """
     Main entry point for Module 1.
@@ -124,8 +156,8 @@ def run():
     logger.info("=== Module 1: Daily Commit Checker started ===")
     logger.info(f"Checking {len(config.TEAM_REPOS)} team member(s)...")
 
-    results      = []
-    alert_count  = 0
+    results     = []
+    alert_count = 0
 
     for username, repo_name in config.TEAM_REPOS.items():
         committed = has_committed_today(username, repo_name)
@@ -144,6 +176,10 @@ def run():
         logger.info("All team members have committed today. No alerts sent.")
     else:
         logger.info(f"Alerts sent for {alert_count} member(s).")
+
+    # Always send the daily summary email regardless of commit status
+    send_daily_summary(results)
+    logger.info("Daily summary email sent.")
 
     log_result(results)
 

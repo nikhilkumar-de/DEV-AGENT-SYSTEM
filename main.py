@@ -43,7 +43,7 @@ def main():
 
     logger.info(
         f"Scheduler started. Commit check will run daily at "
-        f"{config.COMMIT_CHECK_HOUR:02d}:{config.COMMIT_CHECK_MINUTE:02d} UTC."
+        f"{config.COMMIT_CHECK_HOUR:02d}:{config.COMMIT_CHECK_MINUTE:02d} IST."
     )
     logger.info("Press Ctrl+C to stop.")
 
